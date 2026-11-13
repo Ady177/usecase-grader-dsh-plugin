@@ -1,6 +1,6 @@
 import { Service, type Context } from '@deepseek-ai/cordis';
 import { registerRunTool } from '../vendor/runtime-sdk/lib/index.js';
-import { gradeAssignment, prepareStandards, generateStandardsFromTopic, type StandardAnswer } from './workflows.js';
+import { gradeAssignment, prepareStandards, generateStandardsFromTopic, type StandardsState } from './workflows.js';
 
 export default class UsecaseGrader extends Service {
   static inject = ['tools', 'sfRuntime'];
@@ -9,9 +9,12 @@ export default class UsecaseGrader extends Service {
     super(ctx, 'usecaseGrader');
   }
 
+  private readonly standardsState: StandardsState = { value: [] };
+
   async *[Service.init]() {
     const unregister: Array<() => Promise<void>> = [];
     yield async () => { await Promise.all(unregister.map((dispose) => dispose())); };
+    const service = this;
 
     unregister.push(registerRunTool<{ topicText: string; teacherDescTemplate?: string }>(this.ctx, {
     toolId: 'sf_usecase_generate_baseline',
@@ -28,7 +31,7 @@ export default class UsecaseGrader extends Service {
     async execute(input, execution) {
       if (!input.topicText.trim()) return { text: '请输入系统题目描述！' };
       try {
-        return await generateStandardsFromTopic(execution, input.topicText, input.teacherDescTemplate ?? '');
+        return await generateStandardsFromTopic(execution, input.topicText, service.standardsState, input.teacherDescTemplate ?? '');
       } catch (error) {
         return { text: `基于题目生成基础答案失败：${errorMessage(error)}` };
       }
@@ -50,44 +53,31 @@ export default class UsecaseGrader extends Service {
     async execute(input, execution) {
       if (!input.seedAnswer.trim()) return { text: '请输入教师标准答案！' };
       try {
-        return await prepareStandards(execution, input.seedAnswer, input.teacherDesc ?? '');
+        return await prepareStandards(execution, input.seedAnswer, input.teacherDesc ?? '', service.standardsState);
       } catch (error) {
         return { text: `生成失败：${errorMessage(error)}` };
       }
     },
     }));
 
-    unregister.push(registerRunTool<{ assignmentContent: string; standards: StandardAnswer[] }>(this.ctx, {
+    unregister.push(registerRunTool<{ assignmentContent: string }>(this.ctx, {
     toolId: 'sf_usecase_grade_assignment',
-    description: '对照传入的参考答案匹配并批改学生UML用例模型作业，返回分数、依据和改进建议。',
+    description: '使用本插件已生成的标准答案匹配并批改学生UML用例模型作业，返回分数、依据和改进建议。',
     inputSchema: {
       type: 'object',
       properties: {
         assignmentContent: { type: 'string', description: '学生提交的用例图答案和用例描述' },
-        standards: {
-          type: 'array',
-          description: '参考答案数组；可使用生成参考答案工具交付的JSON内容',
-          items: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              diagram: { type: 'string' },
-              desc: { type: 'string' },
-            },
-            required: ['name', 'diagram', 'desc'],
-            additionalProperties: false,
-          },
-        },
       },
-      required: ['assignmentContent', 'standards'],
+      required: ['assignmentContent'],
       additionalProperties: false,
     },
     async execute(input, execution) {
-      if (input.standards.length === 0) return { text: '最终得分：0\n\n得分明细：请先生成标准答案\n\n总结与改进建议：无' };
+      if (service.standardsState.value.length === 0) return { text: '最终得分：0\n\n请先生成标准答案\n\n无' };
       try {
-        return await gradeAssignment(execution, input.assignmentContent, input.standards);
+        const result = await gradeAssignment(execution, input.assignmentContent, service.standardsState.value);
+        return { text: `最终得分：${result.score}\n\n${result.detail}\n\n${result.summary}` };
       } catch (error) {
-        return { text: `最终得分：0\n\n得分明细：批改异常\n\n总结与改进建议：${errorMessage(error)}` };
+        return { text: `最终得分：0\n\n批改异常\n\n${errorMessage(error)}` };
       }
     },
     }));
