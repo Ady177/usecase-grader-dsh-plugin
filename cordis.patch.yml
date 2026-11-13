@@ -1,0 +1,3 @@
+- insert:
+    - id: usecase-grader
+      name: usecase-grader-dsh

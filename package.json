@@ -1,0 +1,17 @@
+{
+  "name": "usecase-grader-dsh",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "UML use case model grading DSH plugin",
+  "main": "./lib/index.js",
+  "exports": { ".": "./lib/index.js", "./cordis.patch.yml": "./cordis.patch.yml", "./package.json": "./package.json" },
+  "files": ["lib", "vendor/runtime-sdk", "cordis.patch.yml", "README.md"],
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.5-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.2.1-alpha.2"
+  },
+  "engines": { "node": ">=24" },
+  "scripts": { "build": "node scripts/build.mjs" }
+}
