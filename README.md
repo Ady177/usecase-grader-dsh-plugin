@@ -1,74 +1,60 @@
 # UML 用例模型智能批改 DSH 插件
 
-将原 Python/Gradio「用例模型打分」程序的处理流程接入软件工厂 Run。业务流程以 TypeScript 实现，通过 Runtime SDK 注册 DSH Run Tool，并使用当前任务选定的模型。
+将原 Python/Gradio「用例模型打分」流程接入软件工厂。插件注册一个 DSH Run Tool，在单个任务内准备标准答案、匹配并批改；业务模型调用使用 Runtime SDK `execution.model.call()`。
 
-## 功能
+## 单工具流程
 
-插件保留原程序的三个操作：
+Tool ID：`sf_usecase_grader`
 
-1. **生成基础答案**：从题目抽取参与者、用例和实体，最多执行两轮 CRUD 缺口检测与补全，生成一份用例描述，并将该答案写入标准答案库。
-2. **生成标准答案库**：从教师标准答案中提取用例图，生成扩大边界和缩小边界两个变体，审核变体，为原答案和两个变体分别生成用例描述，并依次写入标准答案库。
-3. **批改作业**：先按参与者设置匹配标准答案，再按原评分提示词评分；总分按反馈项目 `score_added` 求和。
+1. 提交学生作业，并在题目需求或教师答案中提供一个作为参考答案来源。
+2. 未提供教师答案时，根据题目生成基础标准答案（原 CRUD 检查最多两轮）。
+3. 提供教师答案时，`expandToVariants: false` 使用教师答案作为单份标准答案；为 `true` 时按原流程生成、审核扩大和缩小边界变体，共三份标准答案。
+4. 匹配参考答案，按原评分规则评分并交付报告。
 
-## Tools、输入与输出
+Tool 输入：
 
-| toolId | 必填输入 | 可选输入 | 输出 |
-| --- | --- | --- | --- |
-| `sf_usecase_generate_baseline` | `topicText`：题目/需求文本 | `teacherDescTemplate`：用例描述模板 | 基础答案预览文本 |
-| `sf_usecase_generate_standards` | `seedAnswer`：教师答案中的参与者和用例 | `teacherDesc`：教师用例描述模板 | 三份标准答案预览文本 |
-| `sf_usecase_grade_assignment` | `assignmentContent`：学生作业 | 无 | 最终得分、匹配依据、得分明细、总结和建议 |
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `assignmentContent` | 是 | 学生作业内容 |
+| `topicText` | 否 | 无教师答案时用来生成基础标准答案；需与 `teacherAnswer` 至少提供一项 |
+| `teacherAnswer` | 否 | 教师答案中的参与者、用例和可选的“用例描述”段 |
+| `teacherDesc` | 否 | 描述模板；教师答案未包含描述时用于生成描述 |
+| `expandToVariants` | 否 | 有教师答案时是否扩展为原始、扩大、缩小三份答案；默认 `false` |
 
-标准答案库保存在插件 Service 实例内存中，与原程序的进程内 `GLOBAL_STANDARDS` 对应。先调用任一答案生成 Tool，再调用批改 Tool。插件进程重启后内存状态清空，需要重新生成标准答案。插件不生成 JSON 标准答案文件，也不要求批改调用者额外传入标准答案数组。
+`teacherAnswer` 优先于 `topicText`。三种原流程的业务提示词、温度、两轮 CRUD 上限、变体审核、参考答案匹配回退、评分项目及 `score_added` 求和方式保留。原 Gradio 的分数、明细和总结在 Run Tool 中合并为文本，同时提供结构化 JSON。
 
-评分维度及规则沿用原程序：用例图 40 分，用例描述 60 分；总分根据模型返回的详细反馈中 `score_added` 累加。评分结果包含标准答案匹配名称和原因、得分明细、批改总结及改进建议。
+## 任务目录、产物与下载
 
-## 运行环境与构建
+所有业务数据写入 Runtime 提供的 `execution.outputDirectory`，标准答案在每次执行中重新构造，不保存在插件 Service 共享数组或跨任务公共文件中。典型目录：
 
-当前目标基线依据组内材料：Node.js 24+、DSH `0.2.1-alpha.2`、Runtime 0.4.0、Runtime SDK 0.4.1。Runtime README 说明 DSH 0.2.2 尚未适配，请勿据此宣称兼容 DSH 0.2.2。
+```text
+input/algorithm-request.json
+intermediate/model-calls/                 # 每次模型调用的请求、响应/错误
+intermediate/initial-model.json            # 题目生成路径
+snapshots/                                  # CRUD 检查与逐份标准答案快照
+intermediate/standards.json                 # 当前任务的标准答案库
+intermediate/matched-standard.json         # 匹配结果
+intermediate/grading-result.json            # 评分原始结构化结果
+final/grading-result.txt                    # 人类可读报告
+final/grading-result.json                   # 结构化报告与标准答案
+```
 
-源码按组内 `software-factory-x-req-split` 的 Cordis Service 工程结构组织。插件携带 Runtime SDK；构建脚本使用 Node.js 内置 TypeScript 类型剥离生成 `lib/*.js`。在插件目录运行：
+写入后通过 `execution.addArtifact()` 登记。最终两个文件的 `artifactId` 从 Run Tool 的 `files` 返回；Runtime 为下载提供认证引用。成功、失败、取消时，已写入的有效中间材料留在当前 Run 下。Runtime 的取消信号传入模型调用前后及文件保存检查；未捕获的异常向 Runtime 抛出，由 Runtime 标记失败。
+
+## Agent 登记资料
+
+包内 `agent-registration.json` 是本插件的草稿登记资料，Tool ID 与 `dsh_ref` 一致。它不直接写数据库；逻辑 Agent ID、开发人员、性能证据和版本顶点 ID 等未知信息不伪造，提交平台前应由维护者确认并补齐实际身份资料。
+
+## 运行与构建
+
+目标依据已提供组内材料：Node.js 24+、DSH `0.2.1-alpha.2`、Runtime 0.4.0、Runtime SDK 0.4.1。插件包携带 SDK，运行时依赖 DSH 宿主的 Cordis 和 DSH Tools，并需先启用 Runtime。
 
 ```powershell
 node scripts/build.mjs
 ```
 
-该构建只转译 TypeScript，不执行独立的静态类型检查。插件运行时使用 DSH 宿主提供的 Cordis 和 DSH Tools 模块。安装插件前应先启用 Runtime。
+构建使用 Node.js 内置 TypeScript 类型剥离；另行类型检查使用组内对应版本类型。模型/API 凭据由宿主提供，插件不读取或保存 API Key。
 
-## 调用示例
+## 验证范围
 
-生成基础答案：
-
-```json
-{
-  "topicText": "设计一个图书管理系统，读者可以查询、借阅和归还图书；管理员可以上架图书。"
-}
-```
-
-生成标准答案库：
-
-```json
-{
-  "seedAnswer": "参与者：读者、图书管理员\n用例：查询图书、借阅图书、归还图书、上架图书",
-  "teacherDesc": "用例名称：借阅图书……"
-}
-```
-
-批改作业：
-
-```json
-{
-  "assignmentContent": "参与者：读者、图书管理员\n用例：查询图书、借阅图书……"
-}
-```
-
-## 源码
-
-- `src/index.ts`：Cordis Service 与三个 Run Tool 注册。
-- `src/workflows.ts`：原项目的答案生成、变体审核、答案匹配和评分流程。
-- `src/llm.ts`：Runtime SDK 模型调用及 JSON/文本解析。
-- `cordis.patch.yml`：DSH Bundle 插件挂载配置。
-- `scripts/build.mjs`：构建 DSH 加载的 JavaScript 文件。
-
-## 验证状态
-
-此前完成过严格 TypeScript 类型检查、三条业务流程的假模型验证，以及 DSH `0.2.1-alpha.2` + Runtime `0.4.0` 的本机加载验证。真实模型端到端调用仍需配置可用模型后验证。
+构建、静态类型检查及假模型 Run 验证可检查参数分支、产物登记、进度和取消/错误传递。真实模型调用及目标 DSH 宿主上的新版单工具加载仍需在有凭据的宿主环境验收；README 不将模拟调用称为真实模型效果证据。

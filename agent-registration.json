@@ -1,0 +1,33 @@
+{
+  "agent": {
+    "name": "UML用例模型智能批改"
+  },
+  "agentVersion": {
+    "properties": {
+      "version": "v1.0.0",
+      "description": "依据软件工程课程题目或教师用例答案准备参考答案，匹配学生用例模型并按既有评分规则生成批改结果。",
+      "status": "draft",
+      "invoke_kind": "dsh_tool",
+      "dsh_ref": "sf_usecase_grader",
+      "input_schema": {
+        "description": "学生作业必填；题目需求或教师答案至少提供一项；教师答案可选择扩展为三份参考答案。",
+        "x-artifact-kind": "text",
+        "x-media-type": "text/plain",
+        "x-required": true,
+        "x-allow-blank": false
+      },
+      "output_schema": {
+        "description": "用例模型评分文本报告及可下载的结果文件。",
+        "x-artifact-kind": "file",
+        "x-file-extension": ".txt"
+      },
+      "intermediate_artifacts_json": [
+        { "description": "当前任务输入快照", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "description": "模型调用请求、响应或错误记录", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "description": "当前任务生成的参考答案库", "x-artifact-kind": "file", "x-file-extension": ".json" }
+      ],
+      "constraints_json": { "runtime": "Node.js", "version": ">=24" },
+      "object_categories_json": ["软件工程课程题目", "UML用例模型作业", "用例模型批改报告"]
+    }
+  }
+}
