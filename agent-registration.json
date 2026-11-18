@@ -1,33 +1,61 @@
 {
   "agent": {
-    "name": "UML用例模型智能批改"
+    "name": "UML用例模型智能批改",
+    "description": "为软件工程课程用例模型作业准备标准答案、匹配参考答案并按既有评分规则批改。"
   },
   "agentVersion": {
     "properties": {
-      "version": "v1.0.0",
-      "description": "依据软件工程课程题目或教师用例答案准备参考答案，匹配学生用例模型并按既有评分规则生成批改结果。",
-      "status": "draft",
+      "version": "v0.2.0",
+      "description": "单个 DSH Run Tool 串联题目基准答案生成、教师答案单份/三份标准答案准备、答案匹配和评分。按 Run 隔离答案库；保存并登记模型往返、处理快照和最终报告。",
+      "developer": "Ady177",
       "invoke_kind": "dsh_tool",
       "dsh_ref": "sf_usecase_grader",
       "input_schema": {
-        "description": "学生作业必填；题目需求或教师答案至少提供一项；教师答案可选择扩展为三份参考答案。",
-        "x-artifact-kind": "text",
-        "x-media-type": "text/plain",
-        "x-required": true,
-        "x-allow-blank": false
+        "type": "object",
+        "required": ["assignmentContent"],
+        "properties": {
+          "assignmentContent": { "type": "string", "description": "学生提交的用例模型作业" },
+          "topicText": { "type": "string", "description": "无教师答案时用于生成基础标准答案的题目需求" },
+          "teacherAnswer": { "type": "string", "description": "教师标准答案中的用例图及可选用例描述" },
+          "teacherDesc": { "type": "string", "description": "教师用例描述模板；缺省时采用原版默认格式" },
+          "expandToVariants": { "type": "boolean", "description": "提供教师答案时是否扩展为扩大/缩小边界三份标准答案，默认 false" }
+        },
+        "additionalProperties": false,
+        "description": "assignmentContent 必填；topicText 或 teacherAnswer 至少提供一项。teacherAnswer 优先；其存在时 expandToVariants 决定采用单份还是三份参考答案。"
       },
       "output_schema": {
-        "description": "用例模型评分文本报告及可下载的结果文件。",
-        "x-artifact-kind": "file",
-        "x-file-extension": ".txt"
+        "type": "object",
+        "properties": {
+          "text": { "type": "string", "description": "最终分数、匹配依据、得分明细、总结和建议" },
+          "files": { "type": "array", "items": { "type": "string" }, "description": "已登记的 final 报告 artifactId 列表" }
+        },
+        "description": "返回批改报告文本及 final/grading-result.txt、final/grading-result.json 的已登记引用。"
       },
       "intermediate_artifacts_json": [
-        { "description": "当前任务输入快照", "x-artifact-kind": "file", "x-file-extension": ".json" },
-        { "description": "模型调用请求、响应或错误记录", "x-artifact-kind": "file", "x-file-extension": ".json" },
-        { "description": "当前任务生成的参考答案库", "x-artifact-kind": "file", "x-file-extension": ".json" }
+        { "path": "input/algorithm-request.json", "description": "本次 Run 输入快照", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "intermediate/model-calls/NNN.json", "description": "每次 Runtime 模型调用的请求、响应或错误记录", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "intermediate/initial-model.json", "description": "题目生成路径的初始参与者、用例和实体", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "snapshots/crud-check-N.json", "description": "逐轮 CRUD 检查模型与缺口结果", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "intermediate/teacher-answer.json", "description": "提取后的教师标准答案用例图", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "intermediate/variants-before-review.json", "description": "审核前的边界答案变体", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "intermediate/variants-after-review.json", "description": "审核后的边界答案变体", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "snapshots/standard-N.json", "description": "逐份生成并写入的标准答案快照", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "intermediate/standards.json", "description": "当前 Run 隔离的标准答案库", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "intermediate/matched-standard.json", "description": "参考答案匹配结果", "x-artifact-kind": "file", "x-file-extension": ".json" },
+        { "path": "intermediate/grading-result.json", "description": "评分模型返回并重算总分后的结构化结果", "x-artifact-kind": "file", "x-file-extension": ".json" }
       ],
-      "constraints_json": { "runtime": "Node.js", "version": ">=24" },
-      "object_categories_json": ["软件工程课程题目", "UML用例模型作业", "用例模型批改报告"]
+      "constraints_json": {
+        "runtime": "Node.js >=24",
+        "dsh": "0.2.1-alpha.2 (target validated baseline)",
+        "softwareFactoryRuntime": "0.4.0",
+        "runtimeSdk": "0.4.1",
+        "taskIsolation": "任务输入、标准答案、中间产物和最终产物限定在当前 execution.outputDirectory。"
+      },
+      "object_categories_json": ["软件工程课程题目", "UML用例模型作业", "用例模型参考答案", "用例模型批改报告"],
+      "performance_evidence_json": {
+        "evidence_kind": "simulation",
+        "summary": "本地假模型流程验证：覆盖题目生成、CRUD 检查、教师答案变体与审核、标准答案匹配和评分；共 12 次模拟模型调用，模拟评分项 15+12 得 27 分，验证到 23 个文件登记和 9 次阶段进度报告。该数据仅为流程模拟，不代表真实模型效果或业务准确率。"
+      }
     }
   }
 }

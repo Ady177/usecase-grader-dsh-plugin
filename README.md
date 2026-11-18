@@ -43,7 +43,9 @@ final/grading-result.json                   # 结构化报告与标准答案
 
 ## Agent 登记资料
 
-包内 `agent-registration.json` 是本插件的草稿登记资料，Tool ID 与 `dsh_ref` 一致。它不直接写数据库；逻辑 Agent ID、开发人员、性能证据和版本顶点 ID 等未知信息不伪造，提交平台前应由维护者确认并补齐实际身份资料。
+包内 `agent-registration.json` 是本插件的结构化 Agent 登记资料，包含能力、调用入口、真实参数、产物、环境约束及模拟验证证据；Tool ID 与 `dsh_ref` 一致。登记资料不由插件直接写数据库，需由平台 Manage/维护者审核录入。`agent_id`、版本顶点 ID 和启用状态由平台在登记流程中确定；开发人员填写为仓库所有者账号 `Ady177`。真实性能、成本和效果尚无实测证据，因此没有编造数值；`performance_evidence_json` 明确标为流程模拟。
+
+字段取舍和入库注意事项见包内 `agent-registration-notes.md`。模型由 Run 发起方选择并经 Runtime 传入，因此不声明固定厂商/模型依赖或模型优选策略。
 
 ## 运行与构建
 
