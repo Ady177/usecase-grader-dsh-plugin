@@ -25,10 +25,9 @@ Tool 输入：
 
 ## 任务目录、产物与下载
 
-所有业务数据写入 Runtime 提供的 `execution.outputDirectory`，标准答案在每次执行中重新构造，不保存在插件 Service 共享数组或跨任务公共文件中。典型目录：
+所有业务数据写入 Runtime 提供的 `execution.outputDirectory`，标准答案在每次执行中重新构造，不保存在插件 Service 共享数组或跨任务公共文件中。Runtime 自动将输入保存为 `input/request.json`；插件不重复复制或登记输入。插件写入的典型产物如下：
 
 ```text
-input/algorithm-request.json
 intermediate/model-calls/                 # 每次模型调用的请求、响应/错误
 intermediate/initial-model.json            # 题目生成路径
 snapshots/                                  # CRUD 检查与逐份标准答案快照
@@ -39,7 +38,7 @@ final/grading-result.txt                    # 人类可读报告
 final/grading-result.json                   # 结构化报告与标准答案
 ```
 
-写入后通过 `execution.addArtifact()` 登记。最终两个文件的 `artifactId` 从 Run Tool 的 `files` 返回；Runtime 为下载提供认证引用。成功、失败、取消时，已写入的有效中间材料留在当前 Run 下。Runtime 的取消信号传入模型调用前后及文件保存检查；未捕获的异常向 Runtime 抛出，由 Runtime 标记失败。
+插件写入的中间产物和最终产物通过 `execution.addArtifact()` 登记。Runtime 自动管理的 `input/request.json` 不由插件再次登记。最终两个文件的 `artifactId` 从 Run Tool 的 `files` 返回；Runtime 为下载提供认证引用。成功、失败、取消时，已写入的有效中间材料留在当前 Run 下。Runtime 的取消信号传入模型调用前后及文件保存检查；未捕获的异常向 Runtime 抛出，由 Runtime 标记失败。
 
 ## Agent 登记资料
 

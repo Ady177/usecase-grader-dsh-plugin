@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Service, type Context } from '@deepseek-ai/cordis';
 import { registerRunTool } from '../vendor/runtime-sdk/lib/index.js';
-import { gradeAssignment, prepareStandards, generateStandardsFromTopic, generateUsecaseDescription } from './workflows.js';
+import { gradeAssignment, prepareStandards, generateStandardsFromTopic, generateUsecaseDescription, type StandardsState } from './workflows.js';
 import { extractDiagramOnly } from './llm.js';
 
 interface Input {
@@ -12,7 +12,6 @@ interface Input {
   teacherDesc?: string;
   expandToVariants?: boolean;
 }
-interface StandardAnswer { name: string; diagram: string; desc: string }
 
 export default class UsecaseGrader extends Service {
   static inject = ['tools', 'sfRuntime'];
@@ -37,7 +36,7 @@ export default class UsecaseGrader extends Service {
       },
       async execute(input, execution) {
         const root = execution.outputDirectory;
-        const standards: StandardAnswer[] = [];
+        const standardsState: StandardsState = { value: [] };
         const save = async (relative: string, value: unknown, kind: 'intermediate' | 'final' = 'intermediate') => {
           execution.signal.throwIfAborted();
           const path = join(root, relative);
@@ -46,14 +45,13 @@ export default class UsecaseGrader extends Service {
           await execution.addArtifact({ kind, name: relative.split('/').at(-1)!, relativePath: relative, mime: 'application/json' });
         };
         await execution.reportProgress({ stage: 'prepare', stageName: '准备标准答案', progress: 5 });
-        await save('input/algorithm-request.json', input);
         if (input.teacherAnswer?.trim()) {
           await execution.reportProgress({ stage: 'teacher-answer', stageName: '读取教师答案', progress: 10 });
           const descMarker = input.teacherAnswer.indexOf('用例描述');
           const embeddedDesc = descMarker >= 0 ? input.teacherAnswer.slice(descMarker + '用例描述'.length).trim() : '';
           const teacherDesc = input.teacherDesc?.trim() ? input.teacherDesc : embeddedDesc;
           if (input.expandToVariants) {
-            const prepared = await prepareStandards(execution, input.teacherAnswer, teacherDesc, { value: standards });
+            const prepared = await prepareStandards(execution, input.teacherAnswer, teacherDesc, standardsState);
             await save('intermediate/standards-preview.json', prepared);
           } else {
             const diagram = extractDiagramOnly(input.teacherAnswer);
@@ -63,24 +61,24 @@ export default class UsecaseGrader extends Service {
                 await execution.reportProgress({ stage: 'description', stageName: '生成教师答案用例描述', progress: 70 });
                 return generateUsecaseDescription(execution, diagram, teacherDesc);
               })();
-            standards.push({ name: '原始答案（基准）', diagram, desc });
+            standardsState.value.push({ name: '原始答案（基准）', diagram, desc });
           }
         } else if (input.topicText?.trim()) {
-          const state = { value: standards };
-          const baseline = await generateStandardsFromTopic(execution, input.topicText, state, input.teacherDesc ?? '');
+          const baseline = await generateStandardsFromTopic(execution, input.topicText, standardsState, input.teacherDesc ?? '');
           await save('intermediate/baseline-preview.json', baseline);
         } else {
           throw new Error('请提供题目需求或教师标准答案');
         }
-        await save('intermediate/standards.json', standards);
+        if (standardsState.value.length === 0) throw new Error('未能准备参考答案');
+        await save('intermediate/standards.json', standardsState.value);
         await execution.reportProgress({ stage: 'grading', stageName: '开始匹配与批改', progress: 80 });
-        const graded = await gradeAssignment(execution, input.assignmentContent, standards);
+        const graded = await gradeAssignment(execution, input.assignmentContent, standardsState.value);
         const report = `最终得分：${graded.score}\n\n${graded.detail}\n\n${graded.summary}`;
         const resultPath = join(root, 'final', 'grading-result.txt');
         await mkdir(join(root, 'final'), { recursive: true });
         await writeFile(resultPath, report, 'utf8');
         const artifact = await execution.addArtifact({ kind: 'final', name: 'grading-result.txt', relativePath: 'final/grading-result.txt', mime: 'text/plain; charset=utf-8' });
-        const resultJson = { score: graded.score, detail: graded.detail, summary: graded.summary, standards };
+        const resultJson = { score: graded.score, detail: graded.detail, summary: graded.summary, standards: standardsState.value };
         const jsonPath = join(root, 'final', 'grading-result.json');
         await writeFile(jsonPath, `${JSON.stringify(resultJson, null, 2)}\n`, 'utf8');
         const jsonArtifact = await execution.addArtifact({ kind: 'final', name: 'grading-result.json', relativePath: 'final/grading-result.json', mime: 'application/json' });

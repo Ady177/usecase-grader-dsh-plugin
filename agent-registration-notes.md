@@ -6,7 +6,7 @@
 |---|---|---|
 | Agent ID | 未填写 | 新建 Agent 的逻辑 ID 由平台按实际登记流程创建；不伪造 |
 | Agent 名称 | UML用例模型智能批改 | 已填写 |
-| Agent 版本 | v0.2.0 | 与插件 package.json 版本一致 |
+| Agent 版本 | v0.2.1 | 与插件 package.json 版本一致 |
 | 启用状态 | 未填写 | 由登记/审核流程决定；草稿不可表示为 enabled |
 | 开发人员 | Ady177 | 使用仓库所有者账号标识 |
 | 调用方式 | dsh_tool | 原生 DSH Run Tool |
@@ -21,6 +21,7 @@
 | 输入规格 | 已填写 | 与实际 Tool JSON Schema 一致；业务校验题目/教师答案至少一个 |
 | 输出规格 | 已填写 | 文本报告与 files artifact ID |
 | 中间产物 | 已填写 | 路径模式与代码落盘内容对应 |
+| 输入快照 | Runtime 自动保存为 `input/request.json` | 不由插件复制或登记为 intermediate |
 | 运行代价 | 未填写 | 没有可核实的成本测量 |
 | 任务效果 | 未填写 | 没有真实任务效果实测数据 |
 
